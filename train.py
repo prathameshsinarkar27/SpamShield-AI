@@ -238,7 +238,202 @@ logger.info("  Grid results → models/svm_gridsearch_results.csv")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3.  SAVE COMBINED RESULTS
+# 3.  MULTI-CLASS CATEGORY CLASSIFIER
+# ─────────────────────────────────────────────────────────────────────────────
+logger.info("")
+logger.info("── [3/4] Category Classifier (multi-class) ────────────")
+
+# Train only on spam rows (ham rows are labelled 'normal' — trivially correct)
+spam_mask_train = y_train == 1
+spam_mask_test  = y_test  == 1
+
+X_cat_train = X_train[spam_mask_train]
+y_cat_train = ycat_train[spam_mask_train]
+X_cat_test  = X_test[spam_mask_test]
+y_cat_test  = ycat_test[spam_mask_test]
+
+logger.info("  Spam train samples: %d  |  categories: %s",
+            len(X_cat_train),
+            dict(pd.Series(y_cat_train).value_counts()))
+
+cat_pipeline = Pipeline([
+    ("tfidf", TfidfVectorizer(
+        max_features=5000,
+        ngram_range=(1, 2),
+        sublinear_tf=True,
+        min_df=1,
+    )),
+    ("clf", CalibratedClassifierCV(
+        LinearSVC(C=1.0, max_iter=2000),
+        cv=3,
+    )),
+])
+cat_pipeline.fit(X_cat_train, y_cat_train)
+
+yp_cat  = cat_pipeline.predict(X_cat_test)
+cat_acc = accuracy_score(y_cat_test, yp_cat)
+
+results["category"] = {
+    "accuracy": round(cat_acc * 100, 2),
+    "f1": round(
+        f1_score(
+            y_cat_test,
+            yp_cat,
+            average="weighted",
+            zero_division=0
+        ) * 100,
+        2
+    )
+}
+
+joblib.dump(cat_pipeline, os.path.join(MODELS_DIR, "category_pipeline.pkl"))
+
+logger.info("  Category accuracy: %.2f%%", cat_acc * 100)
+logger.info(classification_report(y_cat_test, yp_cat))
+logger.info("  Saved → models/category_pipeline.pkl")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4.  DEEP NEURAL NETWORK
+# ─────────────────────────────────────────────────────────────────────────────
+logger.info("")
+logger.info("── [4/4] Deep Neural Network (TensorFlow/Keras) ────────")
+
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import (
+        Dense, Dropout, BatchNormalization, Input, Activation
+    )
+    from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+    from tensorflow.keras.regularizers import l2
+
+    logger.info("  TensorFlow version: %s", tf.__version__)
+    tf.random.set_seed(42)
+
+    # Dedicated TF-IDF for DNN (dense float32 arrays)
+    dnn_tfidf = TfidfVectorizer(
+        max_features=5000,
+        ngram_range=(1, 2),
+        sublinear_tf=True,
+        min_df=2,
+    )
+    X_tr_d = dnn_tfidf.fit_transform(X_train).toarray().astype("float32")
+    X_te_d = dnn_tfidf.transform(X_test).toarray().astype("float32")
+    joblib.dump(dnn_tfidf, os.path.join(MODELS_DIR, "dnn_tfidf.pkl"))
+
+    # ── Architecture ──────────────────────────────────────────────────────
+    input_dim = X_tr_d.shape[1]
+    dnn = Sequential([
+        Input(shape=(input_dim,)),
+
+        Dense(512, use_bias=False),
+        BatchNormalization(),
+        Activation("relu"),
+        Dropout(0.40),
+
+        Dense(256, use_bias=False),
+        BatchNormalization(),
+        Activation("relu"),
+        Dropout(0.35),
+
+        Dense(128, use_bias=False),
+        BatchNormalization(),
+        Activation("relu"),
+        Dropout(0.30),
+
+        Dense(64, activation="relu", kernel_regularizer=l2(1e-4)),
+        Dropout(0.20),
+
+        Dense(1, activation="sigmoid"),
+    ], name="SpamShield_DNN")
+
+    dnn.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+        loss="binary_crossentropy",
+        metrics=[
+            "accuracy",
+            tf.keras.metrics.Precision(name="precision"),
+            tf.keras.metrics.Recall(name="recall"),
+            tf.keras.metrics.AUC(name="auc"),
+        ],
+    )
+    dnn.summary()
+
+    # Class weights to handle imbalance
+    neg, pos = np.bincount(y_train)
+    class_weight = {0: 1.0, 1: round(neg / pos, 4)}
+    logger.info("  Class weights: ham=1.0, spam=%.2f", class_weight[1])
+
+    history = dnn.fit(
+        X_tr_d, y_train,
+        validation_split=0.15,
+        epochs=40,
+        batch_size=64,
+        class_weight=class_weight,
+        callbacks=[
+            EarlyStopping(
+                monitor="val_loss",
+                patience=5,
+                restore_best_weights=True,
+                verbose=1,
+            ),
+            ReduceLROnPlateau(
+                monitor="val_loss",
+                factor=0.5,
+                patience=3,
+                min_lr=1e-6,
+                verbose=1,
+            ),
+        ],
+        verbose=1,
+    )
+
+    ypr_dnn = dnn.predict(X_te_d, verbose=0).ravel()
+    yp_dnn  = (ypr_dnn >= 0.5).astype(int)
+
+    results["dnn"] = {
+        "accuracy":       round(accuracy_score(y_test, yp_dnn) * 100, 2),
+        "precision":      round(precision_score(y_test, yp_dnn, zero_division=0) * 100, 2),
+        "recall":         round(recall_score(y_test, yp_dnn, zero_division=0) * 100, 2),
+        "f1":             round(f1_score(y_test, yp_dnn, zero_division=0) * 100, 2),
+        "auc":            round(roc_auc_score(y_test, ypr_dnn), 4),
+        "cm":             confusion_matrix(y_test, yp_dnn).tolist(),
+        "roc":            roc_points(y_test, ypr_dnn),
+        "epochs_trained": len(history.history["loss"]),
+        "architecture":   (
+            "Dense(512)+BN+ReLU+Drop(0.40) → "
+            "Dense(256)+BN+ReLU+Drop(0.35) → "
+            "Dense(128)+BN+ReLU+Drop(0.30) → "
+            "Dense(64)+L2+Drop(0.20) → Dense(1,sigmoid)"
+        ),
+    }
+
+    # Save model + history
+    dnn.save(os.path.join(MODELS_DIR, "dnn_model.keras"))
+    hist_out = {k: [float(v) for v in vals] for k, vals in history.history.items()}
+    with open(os.path.join(MODELS_DIR, "dnn_history.json"), "w") as fh:
+        json.dump(hist_out, fh, indent=2)
+
+    logger.info("  Accuracy  : %.2f%%", results["dnn"]["accuracy"])
+    logger.info("  Precision : %.2f%%", results["dnn"]["precision"])
+    logger.info("  Recall    : %.2f%%", results["dnn"]["recall"])
+    logger.info("  F1        : %.2f%%", results["dnn"]["f1"])
+    logger.info("  AUC       : %.4f",   results["dnn"]["auc"])
+    logger.info("  Epochs    : %d",     results["dnn"]["epochs_trained"])
+    logger.info("  CM        : %s",     results["dnn"]["cm"])
+    logger.info(classification_report(y_test, yp_dnn, target_names=["ham", "spam"]))
+    logger.info("  Saved → models/dnn_model.keras + models/dnn_history.json")
+
+except ImportError:
+    logger.warning("TensorFlow not installed — skipping DNN training")
+    logger.warning("Install with: pip install tensorflow")
+except Exception as exc:
+    logger.error("DNN training failed: %s", exc, exc_info=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5.  SAVE COMBINED RESULTS
 # ─────────────────────────────────────────────────────────────────────────────
 with open(os.path.join(MODELS_DIR, "results.json"), "w") as fh:
     json.dump(results, fh, indent=2)
