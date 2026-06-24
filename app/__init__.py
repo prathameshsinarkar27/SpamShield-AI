@@ -17,6 +17,11 @@ def create_app() -> Flask:
         static_folder="../static",
     )
 
+    # ── Register blueprints ────────────────────────────────────────────────
+    from app.routes.predict import predict_bp
+
+    flask_app.register_blueprint(predict_bp)    
+
 
     # ── Global error handlers ──────────────────────────────────────────────
     from flask import jsonify
@@ -33,3 +38,6 @@ def create_app() -> Flask:
     def internal_error(e):
         logger.error("Internal server error: %s", e)
         return jsonify({"error": "Internal server error"}), 500
+    
+
+    return flask_app
