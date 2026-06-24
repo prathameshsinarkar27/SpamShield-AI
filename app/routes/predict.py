@@ -45,3 +45,28 @@ def predict():
 
     return jsonify(result), 200
 
+
+# ─── GET /api/metrics ─────────────────────────────────────────────────────────
+@predict_bp.route("/metrics", methods=["GET"])
+def metrics():
+    """
+    Return evaluation metrics for all trained models.
+
+    Response JSON:
+        { models: { naive_bayes: {...}, svm: {...}, dnn: {...} },
+          top_spam_words: [...],
+          dnn_available: bool }
+    """
+    return jsonify({
+        "models":          model_service.get_metrics(),
+        "top_spam_words":  model_service.get_top_spam_words(n=15),
+        "dnn_available":   model_service.is_dnn_available(),
+    }), 200
+
+
+# ─── GET /api/dnn-history ────────────────────────────────────────────────────
+@predict_bp.route("/dnn-history", methods=["GET"])
+def dnn_history():
+    """Return the DNN training loss/accuracy history per epoch."""
+    return jsonify(model_service.get_dnn_history()), 200
+
