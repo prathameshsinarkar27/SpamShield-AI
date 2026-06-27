@@ -46,6 +46,31 @@ def predict():
     return jsonify(result), 200
 
 
+# ─── POST /api/explain ────────────────────────────────────────────────────────
+@predict_bp.route("/explain", methods=["POST"])
+def explain():
+    """
+    Generate a LIME explanation for a prediction.
+
+    Request JSON:
+        { "text": "...", "model": "svm|naive_bayes|dnn", "top_n": 12 }
+
+    Response JSON:
+        { explanation: [{word, weight, direction}, ...], model }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    text      = (body.get("text") or "").strip()
+    model_key = body.get("model", "svm")
+    top_n     = min(int(body.get("top_n", 12)), 20)
+
+    if not text:
+        return jsonify({"error": "Field 'text' is required"}), 400
+
+    logger.info("explain() called — model=%s, top_n=%d", model_key, top_n)
+    explanation = model_service.get_lime_explanation(text, model_key, top_n=top_n)
+    return jsonify({"explanation": explanation, "model": model_key}), 200
+
+
 # ─── GET /api/metrics ─────────────────────────────────────────────────────────
 @predict_bp.route("/metrics", methods=["GET"])
 def metrics():

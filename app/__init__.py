@@ -43,5 +43,5 @@ def create_app() -> Flask:
         logger.error("Internal server error: %s", e)
         return jsonify({"error": "Internal server error"}), 500
     
-
+    logger.info("Flask app created — blueprints: predict, gmail, data, pages")
     return flask_app
