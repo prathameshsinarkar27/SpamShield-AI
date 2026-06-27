@@ -1,0 +1,160 @@
+{% extends "layout.html" %}
+{% block title %}Gmail{% endblock %}
+
+{% block content %}
+<div class="layout">
+
+  <!-- ── SIDEBAR ───────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="panel-title">Live Gmail Inbox</div>
+    <div class="gmail-panel-body">
+      <div class="gmail-controls">
+        <select id="gmail-count" aria-label="Email count">
+          <option value="10">10 emails</option>
+          <option value="20" selected>20 emails</option>
+          <option value="30">30 emails</option>
+          <option value="50">50 emails</option>
+        </select>
+        <select id="gmail-filter" aria-label="Filter">
+          <option value="in:inbox">All Inbox</option>
+          <option value="is:unread">Unread Only</option>
+          <option value="is:read">Read Only</option>
+          <option value="category:promotions">Promotions</option>
+          <option value="category:social">Social</option>
+          <option value="category:updates">Updates</option>
+          <option value="is:starred">Starred</option>
+        </select>
+        <button class="btn-gmail" id="btn-gmail-fetch">
+          <span class="btn-inner">
+            <span class="btn-spinner spinner hidden" id="gmail-fetch-spinner"></span>
+            <span id="gmail-btn-text">Fetch Emails</span>
+          </span>
+        </button>
+      </div>
+      <div id="gmail-status" class="gmail-status hidden"></div>
+      <div id="gmail-dropdown-wrap" class="hidden">
+        <label class="field-label" for="gmail-email-select">Select email to analyze:</label>
+        <select id="gmail-email-select">
+          <option value="">-- Choose an email --</option>
+        </select>
+        <div class="gmail-action-row">
+          <button class="btn-gmail-analyze" id="btn-gmail-analyze" disabled>⚡ Analyze</button>
+          <label class="toggle-label">
+            <input type="checkbox" id="auto-label-toggle"> Auto-label spam
+          </label>
+        </div>
+      </div>
+      <div id="gmail-preview-card" class="gmail-preview hidden">
+        <div class="gmail-preview-header">
+          <div class="gmail-preview-subject" id="gp-subject"></div>
+          <div class="gmail-preview-meta">
+            <span id="gp-sender"></span><span class="sep">·</span><span id="gp-date"></span>
+          </div>
+        </div>
+        <div class="gmail-preview-body scrollable" id="gp-body"></div>
+      </div>
+      <div id="gmail-placeholder" class="gmail-placeholder">
+        <div style="font-size:28px">📬</div>
+        <div>Click <strong>Fetch Emails</strong> to connect to your Gmail inbox.<br>
+        Read-only access. Credentials stay local.</div>
+      </div>
+    </div>
+  </aside><!-- /sidebar -->
+
+  <!-- ── MAIN CONTENT ───────────────────────────────────────────────────── -->
+  <main class="content scrollable">
+
+    <!-- ── MODEL SELECTION ───────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-title">Select Classifier</div>
+      <div class="models-grid" id="models-grid">
+        <div class="loading-row"><span class="spinner"></span> Loading model metrics...</div>
+      </div>
+    </section>
+
+    <!-- ── PREDICTION PANEL ──────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-title">Prediction</div>
+      <div class="predict-card">
+        <div class="predict-meta">
+          <span class="predict-label">// selected message</span>
+          <span class="predict-timing hidden" id="predict-timing"></span>
+        </div>
+        <div class="msg-display" id="msg-display">Fetch your Gmail inbox and select an email to analyze...</div>
+
+        <!-- Token highlight -->
+        <div id="token-section" class="hidden">
+          <div class="field-label">
+            Tokens · <span class="spam-key">■</span> spam-indicative &nbsp; <span class="ham-key">■</span> neutral
+          </div>
+          <div class="token-display" id="token-display"></div>
+        </div>
+
+        <!-- Result area (hidden until prediction runs) -->
+        <div id="result-area" class="hidden">
+
+          <!-- Primary banner -->
+          <div class="result-banner" id="result-banner">
+            <div class="result-left">
+              <div class="result-label" id="result-label">SPAM</div>
+              <span class="result-category" id="result-cat">financial</span>
+            </div>
+            <div class="result-right">
+              <div class="field-label">confidence</div>
+              <div class="conf-value" id="result-conf">97.3%</div>
+              <div class="conf-bar"><div class="conf-fill" id="conf-fill"></div></div>
+            </div>
+          </div>
+
+          <!-- Text feature meta-info -->
+          <div class="text-meta" id="text-meta"></div>
+
+          <!-- All models consensus -->
+          <div class="section-title" style="margin-top:1rem">All Model Predictions</div>
+          <div class="all-models-grid" id="all-models-grid"></div>
+
+          <!-- XAI -->
+          <div class="xai-card">
+            <div class="xai-header">
+              <div>
+                <div class="xai-title" id="xai-title">🔍 Explainable AI — LIME Analysis</div>
+                <div class="xai-sub">Top features influencing this prediction</div>
+              </div>
+              <button class="btn-explain" id="btn-explain">
+                <span class="btn-inner">
+                  <span class="btn-spinner spinner hidden" id="explain-spinner"></span>
+                  <span id="explain-btn-text">Generate Explanation</span>
+                </span>
+              </button>
+            </div>
+
+            <div class="xai-method-tabs" role="tablist">
+              <button class="xai-method-tab active" data-method="lime" role="tab">LIME</button>
+            </div>
+
+            <div id="xai-loading" class="xai-loading hidden"><span class="spinner"></span> <span id="xai-loading-text">Running LIME (500 perturbations)...</span></div>
+            <div id="xai-result" class="hidden">
+              <div class="xai-legend">
+                <span><span class="xai-dot spam-dot"></span>→ SPAM</span>
+                <span><span class="xai-dot ham-dot"></span>→ HAM</span>
+              </div>
+              <div id="xai-bars"></div>
+              <div class="xai-note" id="xai-note">Bar length = LIME feature weight. Positive = spam signal, negative = ham signal.</div>
+            </div>
+            <div id="xai-placeholder" class="xai-placeholder">
+              Click <strong>Generate Explanation</strong> to see which words drive this prediction.
+            </div>
+          </div>
+
+        </div><!-- /result-area -->
+      </div><!-- /predict-card -->
+    </section>
+
+  </main><!-- /content -->
+</div><!-- /layout -->
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/detector.js"></script>
+<script src="/static/js/gmail.js"></script>
+{% endblock %}
