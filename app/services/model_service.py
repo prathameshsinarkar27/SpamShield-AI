@@ -11,6 +11,7 @@ import numpy as np
 import joblib
 from app.utils.logger import get_logger
 from app.utils.preprocess import preprocess, tokenize_for_highlight, extract_text_features
+from app.services import risk_engine
 
 logger = get_logger("spamshield.model_service")
 
@@ -152,8 +153,15 @@ def predict(text: str, model_key: str = "svm", explain: bool = False) -> dict:
     # ── All-models quick consensus ─────────────────────────────────────────
     all_models = _all_models_predict(text)
 
+    # ── Ensemble vote across all loaded models ──────────────────────────────
+    ensemble = build_ensemble(all_models)
+
     # ── Tokenise + highlight ───────────────────────────────────────────────
     tokens = tokenize_for_highlight(text, _SPAM_VOCAB)
+
+    # ── Spam Risk Score (explainable, rule-based second opinion) ───────────
+    text_features = extract_text_features(text)
+    risk_score = risk_engine.compute_risk_score(text, text_features, tokens, prob_spam)
 
     # ── LIME explanation ───────────────────────────────────────────────────
     explanation = []
@@ -172,9 +180,12 @@ def predict(text: str, model_key: str = "svm", explain: bool = False) -> dict:
         "category":         category,
         "tokens":           tokens,
         "all_models":       all_models,
+        "ensemble":         ensemble,
+        "risk_score":       risk_score,
         "model_used":       model_key,
         "explanation":      explanation,
         "processing_time_ms": ms,
+        "text_features":    text_features,
     }
 
 
@@ -247,6 +258,46 @@ def _all_models_predict(text: str) -> dict:
 
     return results
 
+# Relative trust weights for the ensemble vote. DNN and SVM are weighted
+# slightly higher than Naive Bayes, reflecting their typically stronger
+# precision/recall on this dataset  
+
+ENSEMBLE_WEIGHTS = {"naive_bayes": 0.9, "svm": 1.1, "dnn": 1.1}
+
+
+def build_ensemble(all_models: dict) -> dict | None:
+    """
+    Combine per-model probabilities into a single weighted-average
+    consensus prediction. Returns None if fewer than 2 models are
+    available (an "ensemble" of one model isn't meaningful).
+
+    Returns:
+        {label, confidence, prob_spam, agreement, votes, weights_used}
+    """
+    available = {k: v for k, v in all_models.items() if "prob_spam" in v}
+    if len(available) < 2:
+        return None
+
+    total_weight  = sum(ENSEMBLE_WEIGHTS.get(k, 1.0) for k in available)
+    weighted_prob = sum(
+        v["prob_spam"] * ENSEMBLE_WEIGHTS.get(k, 1.0) for k, v in available.items()
+    ) / total_weight
+
+    label      = "spam" if weighted_prob >= 0.5 else "ham"
+    confidence = round((weighted_prob if label == "spam" else 1 - weighted_prob) * 100, 1)
+
+    spam_votes = sum(1 for v in available.values() if v["label"] == "spam")
+    ham_votes  = len(available) - spam_votes
+    agreement  = round(max(spam_votes, ham_votes) / len(available) * 100, 1)
+
+    return {
+        "label":       label,
+        "confidence":  confidence,
+        "prob_spam":   round(weighted_prob, 4),
+        "agreement":   agreement,
+        "votes":       {"spam": spam_votes, "ham": ham_votes},
+        "weights_used": {k: ENSEMBLE_WEIGHTS.get(k, 1.0) for k in available},
+    }
 
 
 def _classify_category(text: str, label: str) -> str:

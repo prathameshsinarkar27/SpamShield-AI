@@ -245,6 +245,8 @@ function renderResult(data) {
   fill.style.width = `${data.confidence}%`;
   fill.className   = `conf-fill ${isSpam ? "fill-spam" : "fill-ham"}`;
 
+  // ── Spam Risk Score ──────────────────────────────────────────────────
+  renderRiskScore(data.risk_score);
   
   // ── Processing time ─────────────────────────────────────────────────
   if (data.processing_time_ms != null) {
@@ -263,6 +265,9 @@ function renderResult(data) {
     tf.has_phone   ? `<span class="meta-chip" style="color:var(--warn)">📞 Phone number</span>` : "",
     tf.exclamation_ct > 1 ? `<span class="meta-chip" style="color:var(--accent)">! × ${tf.exclamation_ct}</span>` : "",
   ].join("");
+
+  // ── Ensemble consensus ─────────────────────────────────────────────
+  renderEnsemble(data.ensemble);
 
 
   // ── All models ──────────────────────────────────────────────────────
@@ -332,7 +337,6 @@ function renderRiskScore(risk) {
     </div>
   `).join("");
 }
-
 
 
 function resetXai() {

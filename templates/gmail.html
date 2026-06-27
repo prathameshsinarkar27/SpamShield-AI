@@ -106,8 +106,36 @@
             </div>
           </div>
 
+          <!-- Spam Risk Score -->
+          <div id="risk-card" class="risk-card hidden">
+            <div class="risk-header">
+              <span class="risk-title">⚠️ Spam Risk Score</span>
+              <span class="risk-tier" id="risk-tier">LOW</span>
+            </div>
+            <div class="risk-composite-row">
+              <div class="risk-composite-value" id="risk-composite">0</div>
+              <div class="risk-composite-bar"><div class="risk-composite-fill" id="risk-composite-fill"></div></div>
+            </div>
+            <div class="risk-breakdown" id="risk-breakdown"></div>
+          </div>
+
           <!-- Text feature meta-info -->
           <div class="text-meta" id="text-meta"></div>
+
+          <!-- Ensemble consensus -->
+          <div id="ensemble-card" class="ensemble-card hidden">
+            <div class="ensemble-header">
+              <span class="ensemble-title">🗳️ Ensemble Consensus</span>
+              <span class="ensemble-agreement" id="ensemble-agreement"></span>
+            </div>
+            <div class="ensemble-body">
+              <div class="ensemble-verdict">
+                <span class="ensemble-label" id="ensemble-label">SPAM</span>
+                <span class="ensemble-conf" id="ensemble-conf">—%</span>
+              </div>
+              <div class="ensemble-votes" id="ensemble-votes"></div>
+            </div>
+          </div>
 
           <!-- All models consensus -->
           <div class="section-title" style="margin-top:1rem">All Model Predictions</div>
