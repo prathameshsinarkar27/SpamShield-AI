@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<main class="content scrollable full-width">
+
+  <!-- ── DASHBOARD ─────────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-title">Visualization Dashboard</div>
+    <div id="dashboard-loading" class="loading-row"><span class="spinner"></span> Loading dashboard data from API...</div>
+    <div id="dashboard-content" class="hidden">
+
+      <!-- Stats cards -->
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-val accent2" id="stat-total">—</div><div class="stat-label">Total Messages</div></div>
+        <div class="stat-card"><div class="stat-val accent3" id="stat-ham">—</div><div class="stat-label">Ham (Legitimate)</div></div>
+        <div class="stat-card"><div class="stat-val accent" id="stat-spam">—</div><div class="stat-label">Spam Detected</div></div>
+        <div class="stat-card"><div class="stat-val warn" id="stat-ratio">—</div><div class="stat-label">Spam Ratio (%)</div></div>
+      </div>
+
+      <!-- Charts grid -->
+      <div class="chart-grid">
+
+        <div class="chart-card">
+          <div class="chart-label">// class distribution</div>
+          <div class="legend-row" id="legend-c1"></div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c1"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-label">// spam categories</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="c2"></canvas></div>
+        </div>
+
+        <div class="chart-card full">
+          <div class="chart-label">// model performance — precision / recall / F1</div>
+          <div class="legend-row">
+            <span><span class="legend-dot" style="background:#7b61ff"></span>Precision</span>
+            <span><span class="legend-dot" style="background:#ff4d6d"></span>Recall</span>
+            <span><span class="legend-dot" style="background:#00d4aa"></span>F1-Score</span>
+          </div>
+          <div class="chart-wrap" style="height:240px"><canvas id="c3"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-label">// ROC curves</div>
+          <div class="legend-row" id="roc-legend"></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c5"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-label">// top spam-indicative words (learned from NB)</div>
+          <div class="top-words" id="top-words">
+            <div class="loading-row"><span class="spinner"></span></div>
+          </div>
+        </div>
+
+        <!-- DNN history — shown only when DNN is available -->
+        <div class="chart-card full hidden" id="dnn-history-card">
+          <div class="chart-label">// DNN training history — loss &amp; accuracy per epoch</div>
+          <div class="legend-row">
+            <span><span class="legend-dot" style="background:#7b61ff"></span>Train Loss</span>
+            <span><span class="legend-dot" style="background:#ff4d6d"></span>Val Loss</span>
+            <span><span class="legend-dot" style="background:#00d4aa"></span>Train Acc</span>
+            <span><span class="legend-dot" style="background:#ffa500"></span>Val Acc</span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="c6"></canvas></div>
+        </div>
+
+        <div class="chart-card full">
+          <div class="chart-label">// confusion matrices</div>
+          <div class="cm-grid" id="cm-grid"></div>
+        </div>
+
+      </div><!-- /chart-grid -->
+
+      <!-- GridSearchCV results -->
+      <div class="gridsearch-card" id="gridsearch-card">
+        <div class="chart-label">// SVM GridSearchCV — best hyperparameters</div>
+        <div id="gridsearch-content" class="gs-content"></div>
+      </div>
+
+    </div><!-- /dashboard-content -->
+  </section>
+
+</main><!-- /content -->
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}
