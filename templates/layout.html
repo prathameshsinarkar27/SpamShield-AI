@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}SpamShield Pro{% endblock %} — Intelligent Spam Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <div class="logo-text">SpamShield AI <span class="ai-badge">AI</span></div>
+      <div class="logo-sub">Naive Bayes · SVM (GridSearchCV) · DNN + LIME XAI</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-stats" id="header-stats">
+      <span class="hstat" id="hs-total"><span class="hstat-val">—</span><span class="hstat-label">Messages</span></span>
+      <span class="hstat-div"></span>
+      <span class="hstat" id="hs-spam"><span class="hstat-val">—</span><span class="hstat-label">Spam</span></span>
+      <span class="hstat-div"></span>
+      <span class="hstat" id="hs-ham"><span class="hstat-val">—</span><span class="hstat-label">Ham</span></span>
+    </div>
+    <div class="server-status" id="server-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Connecting...</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── PAGE NAV ────────────────────────────────────────────────────────── -->
+<nav class="page-nav" role="navigation" aria-label="Main">
+  <a href="/detect"    class="page-tab {{ 'active' if active_page == 'detect' }}">Detector</a>
+  <a href="/dashboard" class="page-tab {{ 'active' if active_page == 'dashboard' }}">Dashboard</a>
+  <a href="/gmail"     class="page-tab {{ 'active' if active_page == 'gmail' }}">📧 Gmail</a>
+  <a href="/analytics" class="page-tab {{ 'active' if active_page == 'analytics' }}">Analytics</a>
+</nav>
+
+<!-- ── PAGE CONTENT ────────────────────────────────────────────────────── -->
+{% block content %}{% endblock %}
+
+<script src="/static/js/common.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

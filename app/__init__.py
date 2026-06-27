@@ -20,9 +20,11 @@ def create_app() -> Flask:
     # ── Register blueprints ────────────────────────────────────────────────
     from app.routes.predict import predict_bp
     from app.routes.data    import data_bp
+    from app.routes.pages   import pages_bp
 
     flask_app.register_blueprint(predict_bp)
-    flask_app.register_blueprint(data_bp)    
+    flask_app.register_blueprint(data_bp)
+    flask_app.register_blueprint(pages_bp)    
 
 
     # ── Global error handlers ──────────────────────────────────────────────
