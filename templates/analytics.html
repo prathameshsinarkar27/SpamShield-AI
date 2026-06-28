@@ -61,6 +61,42 @@
     </div>
   </section>
 
+  <!-- ── NLP INTELLIGENCE PANEL ───────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-title">NLP Intelligence Panel</div>
+    <div class="nlp-sub">Live n-gram &amp; keyword frequency stats, computed directly from the dataset</div>
+    <div id="nlp-loading" class="loading-row"><span class="spinner"></span> Analyzing dataset...</div>
+    <div id="nlp-content" class="hidden">
+
+      <!-- Length comparison -->
+      <div class="nlp-length-row">
+        <div class="nlp-length-card spam">
+          <div class="nlp-length-label">Spam — avg length</div>
+          <div class="nlp-length-vals"><span id="nlp-spam-chars">—</span> chars · <span id="nlp-spam-words">—</span> words</div>
+        </div>
+        <div class="nlp-length-card ham">
+          <div class="nlp-length-label">Ham — avg length</div>
+          <div class="nlp-length-vals"><span id="nlp-ham-chars">—</span> chars · <span id="nlp-ham-words">—</span> words</div>
+        </div>
+      </div>
+
+      <div class="nlp-grid">
+        <div class="nlp-card">
+          <div class="chart-label">// top spam keywords (unigrams)</div>
+          <div class="nlp-term-list" id="nlp-spam-unigrams"></div>
+        </div>
+        <div class="nlp-card">
+          <div class="chart-label">// top spam phrases (bigrams)</div>
+          <div class="nlp-term-list" id="nlp-spam-bigrams"></div>
+        </div>
+        <div class="nlp-card">
+          <div class="chart-label">// top ham keywords (unigrams)</div>
+          <div class="nlp-term-list" id="nlp-ham-unigrams"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </main><!-- /content -->
 {% endblock %}
 

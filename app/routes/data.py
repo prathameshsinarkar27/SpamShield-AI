@@ -73,3 +73,81 @@ def stats():
         "top_spam_words": model_service.get_top_spam_words(n=15),
     }), 200
 
+
+_NLP_INTEL_CACHE: dict = {}
+
+
+def _compute_nlp_intelligence() -> dict:
+    """
+    Live n-gram / keyword frequency stats computed directly from the
+    dataset (data/spam_data.csv) — no ML model involved, just descriptive
+    text statistics. Cached after first computation (dataset is static
+    within a server run).
+    """
+    global _NLP_INTEL_CACHE
+    if _NLP_INTEL_CACHE:
+        return _NLP_INTEL_CACHE
+
+    from sklearn.feature_extraction.text import CountVectorizer
+
+    msgs  = _load_dataset()
+    spam_texts = [str(m["text"]) for m in msgs if m.get("label") == "spam"]
+    ham_texts  = [str(m["text"]) for m in msgs if m.get("label") == "ham"]
+
+    def top_ngrams(texts: list[str], ngram_range: tuple, top_n: int = 15) -> list[dict]:
+        if len(texts) < 2:
+            return []
+        try:
+            vec = CountVectorizer(
+                ngram_range=ngram_range, stop_words="english",
+                min_df=2, max_features=1000,
+            )
+            counts = vec.fit_transform(texts).sum(axis=0)
+            vocab  = vec.get_feature_names_out()
+            ranked = sorted(zip(vocab, counts.tolist()[0]), key=lambda x: -x[1])
+            return [{"term": w, "count": int(c)} for w, c in ranked[:top_n]]
+        except ValueError:
+            # Happens if the corpus is too small / has no terms surviving min_df
+            return []
+
+    def length_stats(texts: list[str]) -> dict:
+        if not texts:
+            return {"avg_chars": 0, "avg_words": 0}
+        char_lens = [len(t) for t in texts]
+        word_lens = [len(t.split()) for t in texts]
+        return {
+            "avg_chars": round(sum(char_lens) / len(texts), 1),
+            "avg_words": round(sum(word_lens) / len(texts), 1),
+        }
+
+    _NLP_INTEL_CACHE = {
+        "spam_unigrams": top_ngrams(spam_texts, (1, 1)),
+        "spam_bigrams":  top_ngrams(spam_texts, (2, 2)),
+        "ham_unigrams":  top_ngrams(ham_texts, (1, 1)),
+        "spam_length":   length_stats(spam_texts),
+        "ham_length":    length_stats(ham_texts),
+        "spam_count":    len(spam_texts),
+        "ham_count":     len(ham_texts),
+    }
+    logger.info(
+        "NLP intelligence computed — %d spam / %d ham texts analyzed",
+        len(spam_texts), len(ham_texts),
+    )
+    return _NLP_INTEL_CACHE
+
+
+# ─── GET /api/nlp-intelligence ─────────────────────────────────────────────────
+@data_bp.route("/nlp-intelligence", methods=["GET"])
+def nlp_intelligence():
+    """
+    Live n-gram / keyword frequency intelligence computed directly from the
+    dataset — descriptive statistics only, not a trained model. Powers the
+    Analytics page's NLP Intelligence panel.
+
+    Response JSON:
+        { spam_unigrams, spam_bigrams, ham_unigrams,
+          spam_length: {avg_chars, avg_words},
+          ham_length:  {avg_chars, avg_words},
+          spam_count, ham_count }
+    """
+    return jsonify(_compute_nlp_intelligence()), 200
