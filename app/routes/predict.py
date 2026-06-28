@@ -71,6 +71,32 @@ def explain():
     return jsonify({"explanation": explanation, "model": model_key}), 200
 
 
+# ─── POST /api/explain-shap ───────────────────────────────────────────────────
+@predict_bp.route("/explain-shap", methods=["POST"])
+def explain_shap():
+    """
+    Generate a SHAP explanation for a prediction (independent method from
+    LIME — both are available side-by-side in the UI, not a replacement).
+
+    Request JSON:
+        { "text": "...", "model": "svm|naive_bayes|dnn", "top_n": 12 }
+
+    Response JSON:
+        { explanation: [{word, weight, direction}, ...], model }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    text      = (body.get("text") or "").strip()
+    model_key = body.get("model", "svm")
+    top_n     = min(int(body.get("top_n", 12)), 20)
+
+    if not text:
+        return jsonify({"error": "Field 'text' is required"}), 400
+
+    logger.info("explain_shap() called — model=%s, top_n=%d", model_key, top_n)
+    explanation = model_service.get_shap_explanation(text, model_key, top_n=top_n)
+    return jsonify({"explanation": explanation, "model": model_key}), 200
+
+
 # ─── GET /api/metrics ─────────────────────────────────────────────────────────
 @predict_bp.route("/metrics", methods=["GET"])
 def metrics():
@@ -94,4 +120,3 @@ def metrics():
 def dnn_history():
     """Return the DNN training loss/accuracy history per epoch."""
     return jsonify(model_service.get_dnn_history()), 200
-

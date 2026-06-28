@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   SpamShield Pro  —  detector.js
+   SpamShield AI  —  detector.js
    Dataset browsing, custom text input, prediction, and LIME explanation.
-   Used by detector.html. Functions are exposed on window so gmail.js
+   Used by detector.html
    ══════════════════════════════════════════════════════════════════════════ */
 
 "use strict";
@@ -23,6 +23,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setupTabs();
   setupFilters();
   setupExamples();
+  setupXaiMethodTabs();
   $("btn-analyze")?.addEventListener("click", predictCustom);
   $("btn-explain")?.addEventListener("click", runExplain);
 
@@ -247,7 +248,7 @@ function renderResult(data) {
 
   // ── Spam Risk Score ──────────────────────────────────────────────────
   renderRiskScore(data.risk_score);
-  
+
   // ── Processing time ─────────────────────────────────────────────────
   if (data.processing_time_ms != null) {
     const t = $("predict-timing");
@@ -268,7 +269,6 @@ function renderResult(data) {
 
   // ── Ensemble consensus ─────────────────────────────────────────────
   renderEnsemble(data.ensemble);
-
 
   // ── All models ──────────────────────────────────────────────────────
   $("all-models-grid").innerHTML = Object.entries(data.all_models || {}).map(([k, m]) => {
@@ -338,6 +338,50 @@ function renderRiskScore(risk) {
   `).join("");
 }
 
+// ── XAI / Explainability (LIME + SHAP) ─────────────────────────────────────
+const XAI_METHODS = {
+  lime: {
+    label: "LIME", endpoint: "explain",
+    loadingText: "Running LIME (500 perturbations)...",
+    noteText: "Bar length = LIME feature weight. Positive = spam signal, negative = ham signal.",
+    notInstalledHint: "pip install lime",
+  },
+  shap: {
+    label: "SHAP", endpoint: "explainShap",
+    loadingText: "Running SHAP (may take longer than LIME)...",
+    noteText: "Bar length = SHAP value. Positive = pushes toward spam, negative = pushes toward ham.",
+    notInstalledHint: "pip install shap",
+  },
+};
+let activeXaiMethod = "lime";
+let xaiCache = {};  // per-method cache for the CURRENT text, cleared on resetXai()
+
+function setupXaiMethodTabs() {
+  qsa(".xai-method-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      qsa(".xai-method-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      activeXaiMethod = tab.dataset.method;
+
+      const cfg = XAI_METHODS[activeXaiMethod];
+      $("xai-title").textContent = `🔍 Explainable AI — ${cfg.label} Analysis`;
+      $("xai-note").textContent = cfg.noteText;
+
+      if (xaiCache[activeXaiMethod]) {
+        // Already computed for this text — show instantly, no re-fetch.
+        renderXaiBars(xaiCache[activeXaiMethod]);
+        showId("xai-result");
+        hideId("xai-placeholder");
+        $("explain-btn-text").textContent = "Re-run Explanation";
+      } else {
+        hideId("xai-result");
+        showId("xai-placeholder");
+        $("xai-placeholder").innerHTML = `Click <strong>Generate Explanation</strong> to see which words drive this prediction via ${cfg.label}.`;
+        $("explain-btn-text").textContent = "Generate Explanation";
+      }
+    });
+  });
+}
 
 function resetXai() {
   hideId("xai-result");
@@ -356,6 +400,7 @@ async function runExplain() {
   const text = currentText || $("msg-display").textContent;
   if (!text || text.startsWith("Select a message") || text.startsWith("Fetch your Gmail")) return;
 
+  const cfg = XAI_METHODS[activeXaiMethod];
   const btn     = $("btn-explain");
   const spinner = $("explain-spinner");
   btn.disabled  = true;

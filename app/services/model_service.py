@@ -1,7 +1,7 @@
 """
 app/services/model_service.py
 Central ML service. Loads sklearn Pipelines, DNN model, category classifier,
-runs predictions and LIME explanations. No Flask dependency here.
+runs predictions and LIME explanations.
 """
 
 import os
@@ -184,8 +184,8 @@ def predict(text: str, model_key: str = "svm", explain: bool = False) -> dict:
         "risk_score":       risk_score,
         "model_used":       model_key,
         "explanation":      explanation,
-        "processing_time_ms": ms,
         "text_features":    text_features,
+        "processing_time_ms": ms,
     }
 
 
@@ -258,10 +258,11 @@ def _all_models_predict(text: str) -> dict:
 
     return results
 
+
 # Relative trust weights for the ensemble vote. DNN and SVM are weighted
 # slightly higher than Naive Bayes, reflecting their typically stronger
-# precision/recall on this dataset  
-
+# precision/recall on this dataset (see results.json after training) —
+# tune these once real metrics are available.
 ENSEMBLE_WEIGHTS = {"naive_bayes": 0.9, "svm": 1.1, "dnn": 1.1}
 
 
@@ -316,8 +317,9 @@ def _classify_category(text: str, label: str) -> str:
             logger.warning("Category classifier error: %s", exc)
     return "scam"   # safe fallback
 
+
 # ═════════════════════════════════════════════════════════════════════════════
-# text -> probability function builder (used by LIME)
+# SHARED: text -> probability function builder (used by LIME and SHAP)
 # ═════════════════════════════════════════════════════════════════════════════
 def _make_predict_proba_fn(model_key: str):
     """
@@ -336,6 +338,7 @@ def _make_predict_proba_fn(model_key: str):
         pipe = _PIPELINES[model_key]
         return pipe.predict_proba(processed)
     return fn
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # LIME EXPLAINABILITY
@@ -378,8 +381,57 @@ def get_lime_explanation(text: str, model_key: str, top_n: int = 12) -> list[dic
     except Exception as exc:
         logger.error("LIME error (model=%s): %s", model_key, exc)
         return []
-    
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SHAP EXPLAINABILITY
+# ═════════════════════════════════════════════════════════════════════════════
+def get_shap_explanation(text: str, model_key: str, top_n: int = 12) -> list[dict]:
+    """
+    Generate a SHAP local explanation for a single prediction, using a
+    model-agnostic text explainer (shap.Explainer + shap.maskers.Text).
+    Works with NB, SVM, and DNN via the same predict_proba_fn contract
+    used by LIME — kept as a deliberately separate, independent method
+    rather than replacing LIME (different perturbation/attribution
+    approach, useful as a cross-check).
+
+    Returns list of {word, weight, direction} sorted by |weight| desc —
+    same shape as get_lime_explanation(), so the frontend can reuse its
+    rendering logic.
+    """
+    try:
+        import shap
+    except ImportError:
+        logger.warning("shap not installed — pip install shap")
+        return [{"word": "shap not installed", "weight": 0, "direction": "ham"}]
+
+    if model_key == "dnn" and _DNN_MODEL is None:
+        return []
+    if model_key in ("naive_bayes", "svm") and model_key not in _PIPELINES:
+        return []
+
+    try:
+        predict_fn = _make_predict_proba_fn(model_key)
+        masker     = shap.maskers.Text(r"\W+")
+        explainer  = shap.Explainer(predict_fn, masker, output_names=["ham", "spam"])
+
+        shap_values = explainer([text])
+        words   = shap_values.data[0]
+        weights = shap_values.values[0, :, 1]  # spam-class contribution per token
+
+        explanation = [
+            {"word": str(w).strip(), "weight": round(float(wt), 4),
+             "direction": "spam" if wt > 0 else "ham"}
+            for w, wt in zip(words, weights)
+            if str(w).strip()  # drop whitespace-only tokens from the regex split
+        ]
+        explanation.sort(key=lambda x: abs(x["weight"]), reverse=True)
+        explanation = explanation[:top_n]
+        logger.info("SHAP explanation generated — %d features", len(explanation))
+        return explanation
+    except Exception as exc:
+        logger.error("SHAP error (model=%s): %s", model_key, exc)
+        return []
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -433,4 +485,3 @@ def get_top_spam_words(n: int = 15) -> list[dict]:
     except Exception as exc:
         logger.warning("get_top_spam_words failed: %s", exc)
         return []
-
