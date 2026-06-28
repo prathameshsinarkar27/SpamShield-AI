@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+{% block title %}Analytics{% endblock %}
+
+{% block content %}
+<main class="content scrollable full-width">
+
+  <!-- ── PIPELINE ──────────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-title">NLP Pipeline</div>
+    <div class="pipeline">
+      <div class="pipe-step"><span class="num">1</span>Raw Text</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step"><span class="num">2</span>Clean + Tokenize</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step"><span class="num">3</span>Stopword Removal</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step"><span class="num">4</span>Porter Stem</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step"><span class="num">5</span>TF-IDF (1,2)-gram</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step"><span class="num">6</span>NB / SVM / DNN</div>
+      <span class="pipe-arrow">›</span>
+      <div class="pipe-step xai"><span class="num xai-num">XAI</span>LIME Explain</div>
+    </div>
+  </section>
+
+  <!-- ── DNN ARCHITECTURE ───────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-title">DNN Architecture</div>
+    <div class="dnn-arch">
+      <div class="arch-block">
+        <div class="arch-node input-node">TF-IDF<br><span class="arch-dim">5000-dim</span></div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-block">
+        <div class="arch-node dense-node">Dense 512<br><span class="arch-dim">ReLU</span></div>
+        <div class="arch-aux">BatchNorm + Dropout(0.4)</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-block">
+        <div class="arch-node dense-node">Dense 256<br><span class="arch-dim">ReLU</span></div>
+        <div class="arch-aux">BatchNorm + Dropout(0.35)</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-block">
+        <div class="arch-node dense-node">Dense 128<br><span class="arch-dim">ReLU</span></div>
+        <div class="arch-aux">BatchNorm + Dropout(0.3)</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-block">
+        <div class="arch-node dense-node">Dense 64<br><span class="arch-dim">ReLU+L2</span></div>
+        <div class="arch-aux">Dropout(0.2)</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-block">
+        <div class="arch-node output-node">Dense 1<br><span class="arch-dim">Sigmoid</span></div>
+      </div>
+    </div>
+    <div class="arch-meta">
+      Adam (lr=1e-3) · Binary Crossentropy · Class-weighted · EarlyStopping(patience=5) · ReduceLROnPlateau
+    </div>
+  </section>
+
+</main><!-- /content -->
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/analytics.js"></script>
+{% endblock %}
