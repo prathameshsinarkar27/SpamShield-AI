@@ -19,15 +19,14 @@ def create_app() -> Flask:
 
     # ── Register blueprints ────────────────────────────────────────────────
     from app.routes.predict import predict_bp
+    from app.routes.gmail   import gmail_bp
     from app.routes.data    import data_bp
     from app.routes.pages   import pages_bp
-    from app.routes.gmail   import gmail_bp
 
     flask_app.register_blueprint(predict_bp)
+    flask_app.register_blueprint(gmail_bp)
     flask_app.register_blueprint(data_bp)
     flask_app.register_blueprint(pages_bp)
-    flask_app.register_blueprint(gmail_bp)  
-
 
     # ── Global error handlers ──────────────────────────────────────────────
     from flask import jsonify
@@ -44,6 +43,6 @@ def create_app() -> Flask:
     def internal_error(e):
         logger.error("Internal server error: %s", e)
         return jsonify({"error": "Internal server error"}), 500
-    
+
     logger.info("Flask app created — blueprints: predict, gmail, data, pages")
     return flask_app
