@@ -23,5 +23,13 @@ if __name__ == "__main__":
     # Load all ML assets before serving requests
     model_service.load_all()
 
-    logger.info("Server ready → http://127.0.0.1:5000")
-    flask_app.run(debug=True, port=5000, use_reloader=False)
+    port = int(os.environ.get("PORT", 5000))
+
+    logger.info(f"Server ready → http://0.0.0.0:{port}")
+
+    flask_app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        use_reloader=False
+    )
