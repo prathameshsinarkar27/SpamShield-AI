@@ -1,5 +1,5 @@
 """
-app.py  —  SpamShield Pro
+app.py  —  SpamShield AI
 Run: python app.py
 """
 
@@ -17,7 +17,7 @@ flask_app = create_app()
 
 if __name__ == "__main__":
     logger.info("=" * 60)
-    logger.info("  SpamShield Pro — starting up")
+    logger.info("  SpamShield AI — starting up")
     logger.info("=" * 60)
 
     # Load all ML assets before serving requests

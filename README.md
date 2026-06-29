@@ -12,10 +12,19 @@ explainable, rule-based risk score alongside the model predictions.
   and a DNN, combined via a weighted-average ensemble vote
 - **Multi-level classification** — binary spam/ham plus a secondary category
   classifier (financial, phishing, promotional, scam, adult, normal)
+- **Dual explainability** — LIME and SHAP side by side, so you can cross-check
+  *why* a model called something spam
+- **Spam Risk Score** — a second, fully explainable opinion (URL / Keyword /
+  Urgency / Probability) that doesn't depend on trusting a black-box number
 - **Live Gmail integration** — OAuth2, rate-limited, with optional
   auto-labeling of detected spam
+- **NLP Intelligence Panel** — live n-gram/keyword frequency stats computed
+  straight from the dataset
+- **No hardcoded word lists for the core ML signal** — spam vocabulary is
+  learned from the trained Naive Bayes log-probabilities, not a fixed
+  dictionary (see [Key Improvements](#key-improvements-over-a-typical-first-pass))
 
-  ## Architecture
+## Architecture
 
 ```
 SpamShield_AI/
@@ -71,3 +80,216 @@ SpamShield_AI/
     ├── gmail.html                   ← Live Gmail inbox + its own prediction panel
     └── analytics.html               ← NLP pipeline + DNN architecture + NLP Intelligence Panel
 ```
+
+### Pages
+
+Each page is a full server-rendered route, not a single-page app — navigating
+between pages reloads the page and resets prediction state, by design.
+
+| Route | Page | Purpose |
+|-------|------|---------|
+| `/` | — | Redirects to `/detect` |
+| `/detect` | Detector | Browse the dataset or paste custom text → predict, ensemble vote, risk score, LIME/SHAP |
+| `/dashboard` | Dashboard | Model performance charts, ROC curves, confusion matrices, GridSearchCV results |
+| `/gmail` | Gmail | Fetch live inbox, select an email, predict (own result panel, optional auto-label) |
+| `/analytics` | Analytics | NLP pipeline overview, DNN architecture diagram, live NLP Intelligence Panel |
+
+## Setup & Run
+
+Requires **Python 3.10+**.
+
+```bash
+# 1. Create virtual environment
+python -m venv venv
+source venv/bin/activate        # Mac/Linux
+venv\Scripts\activate           # Windows
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Train all models (run ONCE — takes 2-5 minutes)
+python train.py
+
+# 4. Start the server
+python app.py
+# → http://127.0.0.1:5000
+```
+
+### Gmail integration setup (optional)
+
+The Gmail features (`/gmail` page, `/api/gmail/*` routes) need an OAuth2
+credential file. The app works fully without it — every other page and
+endpoint runs independently of Gmail.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a
+   project, enable the **Gmail API**, and create OAuth 2.0 credentials of
+   type "Desktop app."
+2. Download the credentials JSON and save it as `credentials.json` in the
+   project root (same folder as `app.py`).
+3. On first use of any Gmail feature, a browser window opens for you to
+   authorize access. A `token.json` is then saved to the project root and
+   reused (with auto-refresh) on subsequent runs.
+
+Scopes requested: `gmail.readonly` and `gmail.modify` (the latter is only
+needed for the optional spam auto-labeling feature).
+
+## Features
+
+### Three-model classification + ensemble vote
+Naive Bayes (TF-IDF + MultinomialNB), SVM (GridSearchCV-tuned LinearSVC,
+calibrated for probabilities), and a DNN (TF-IDF input, 4 dense layers,
+batch norm + dropout) each produce an independent prediction. `/api/predict`
+also returns an `ensemble` field — a weighted-average consensus across
+whichever models are currently loaded (weights favor SVM/DNN slightly over
+Naive Bayes; tune `ENSEMBLE_WEIGHTS` in `model_service.py` against your own
+`results.json` after training). If fewer than 2 models are loaded, `ensemble`
+is `null` rather than showing a misleading single-model "consensus."
+
+```json
+"ensemble": {
+  "label": "spam", "confidence": 94.3, "prob_spam": 0.9434,
+  "agreement": 100.0, "votes": {"spam": 2, "ham": 0},
+  "weights_used": {"naive_bayes": 0.9, "svm": 1.1, "dnn": 1.1}
+}
+```
+
+### Spam Risk Score
+A second, explainable opinion alongside the ML prediction — useful for
+understanding *why* something looks risky without relying on a black-box
+probability alone. Four sub-scores (0–100 each), weighted into a composite:
+
+| Sub-score | Source | Weight |
+|-----------|--------|--------|
+| Probability | The model's own `prob_spam` | 0.45 |
+| Keyword | % of tokens matching the model's *learned* spam vocabulary (same source as the token-highlight feature — not a separate hardcoded list) | 0.25 |
+| Urgency | Small phrase-pattern set (`urgent`, `act now`, `limited time`, etc.) + exclamation/caps density | 0.20 |
+| URL | Binary — message contains a URL | 0.10 |
+
+Tiers: `critical` (≥75), `high` (≥50), `medium` (≥25), `low` (<25).
+
+```json
+"risk_score": {
+  "composite": 92.2, "tier": "critical",
+  "breakdown": {"url": 100.0, "keyword": 100.0, "urgency": 65.0, "probability": 98.2}
+}
+```
+
+See `app/services/risk_engine.py` for the full scoring logic and design notes.
+
+### Dual explainability — LIME + SHAP
+Both methods are available as tabs in the same Explainable AI card on the
+Detector and Gmail pages — SHAP doesn't replace LIME, it's a cross-check.
+Both work identically across all three models via the same model-agnostic
+predict-function contract.
+
+```
+POST /api/explain        { "text": "...", "model": "svm|naive_bayes|dnn", "top_n": 12 }
+POST /api/explain-shap   { "text": "...", "model": "svm|naive_bayes|dnn", "top_n": 12 }
+→ { explanation: [{word, weight, direction}, ...], model }
+```
+
+SHAP's perturbation process is noticeably slower than LIME's (several
+seconds vs. typically under one) — the UI shows independent loading states
+per method and caches results per-method-per-text, so switching tabs after
+both have run is instant. Requires `pip install shap` (in
+`requirements.txt`); falls back gracefully with an install hint if missing,
+same as LIME.
+
+### Live Gmail inbox scanning
+Fetch your inbox (with filters: unread/read, by Gmail category, starred),
+preview an email, and run it through the same prediction pipeline as the
+Detector page. Optional auto-labeling moves detected spam into Gmail's spam
+folder. Includes a token-bucket rate limiter (60 requests/min) and
+auto-refreshing OAuth2 credentials.
+
+### NLP Intelligence Panel
+Live n-gram/keyword frequency statistics computed directly from the
+dataset — descriptive text statistics, not a trained model. Shows average
+message length (chars/words) for spam vs. ham, top spam unigrams, top spam
+bigrams, and top ham unigrams, computed fresh via
+`sklearn.feature_extraction.text.CountVectorizer` (English stopwords
+removed, `min_df=2` to filter noise). On the bundled dataset this surfaces
+real signal — spam averages ~139 chars / ~24 words vs. ham's ~72 chars /
+~14 words, and spam bigrams like "prize guaranteed" / "await collection" /
+"national rate" stand out clearly from ham's conversational vocabulary.
+
+## REST API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/predict` | Classify text — returns label, confidence, category, ensemble consensus, risk score |
+| POST | `/api/explain` | LIME explanation for a prediction |
+| POST | `/api/explain-shap` | SHAP explanation for a prediction (independent method) |
+| GET | `/api/metrics` | Model performance + learned spam vocab |
+| GET | `/api/dnn-history` | DNN training loss/accuracy per epoch |
+| GET | `/api/dataset` | Full dataset messages |
+| GET | `/api/nlp-intelligence` | Live n-gram/keyword frequency stats from the dataset |
+| GET | `/api/stats` | Dataset statistics + model metrics |
+| GET | `/api/gmail/fetch` | Fetch Gmail inbox |
+| POST | `/api/gmail/classify` | Classify email + optionally auto-label |
+| GET | `/api/gmail/labels` | Gmail label list |
+
+### POST /api/predict
+```json
+{ "text": "...", "model": "svm|naive_bayes|dnn", "explain": false }
+```
+Response includes: `label`, `confidence`, `category`, `tokens`, `all_models`,
+`ensemble`, `risk_score`, `model_used`, `explanation`, `text_features`,
+`processing_time_ms`
+
+### POST /api/gmail/classify
+```json
+{ "message_id": "...", "text": "...", "model": "svm", "auto_label": true }
+```
+If `auto_label=true` and the model predicts spam, the email is automatically
+moved to the Gmail spam folder.
+
+## Known issues & required follow-up
+
+- **Re-run `train.py` to populate `models/`.** The repository ships without
+  trained model files (`models/` and `logs/` are empty except for
+  `.gitkeep`) — every feature above that depends on a loaded model (predict,
+  ensemble, risk score, LIME/SHAP, dashboard charts) needs `python train.py`
+  run first.
+- **ROC curves require a fresh `results.json`.** If you have an old
+  `results.json` from before the ROC fix below, re-run `train.py` to
+  regenerate it with real curve points — otherwise the dashboard will show
+  "ROC data not available" rather than a misleading chart.
+
+## Fix history
+
+- **ROC curves were fake.** The original dashboard plotted hardcoded
+  placeholder coordinates for the ROC curve shape (only the AUC legend value
+  was real). Fixed: `train.py` now computes real FPR/TPR points via
+  `sklearn.metrics.roc_curve()` for all three models and saves them to
+  `results.json`; `dashboard.js` plots those real points.
+- **DNN history chart could stay hidden incorrectly.** It was gated on
+  whether the Keras *model* loaded, but it only needs `dnn_history.json` — a
+  separate file. If the model failed to load while history JSON still
+  existed from a prior run, the chart would never show. Fixed: history is
+  now fetched independently and self-gates on whether data is present.
+- **Gmail page could throw on load.** `detector.js` is shared between the
+  Detector and Gmail pages (for prediction/XAI rendering), but its init
+  unconditionally tried to load the dataset browser, which doesn't exist on
+  the Gmail page. Fixed: dataset loading is now gated on whether the
+  relevant DOM is present.
+
+## Key Improvements Over a Typical First Pass
+
+| Feature | Before | After |
+|---------|--------|-------|
+| Category detection | Hardcoded regex | ML multi-class Pipeline |
+| Spam vocabulary | Hardcoded word list | Learned from NB log-probs |
+| SVM tuning | Fixed C=1.0 | GridSearchCV (9 combos × 5-fold) |
+| Code structure | Single app.py | Blueprints + Services + Utils |
+| Logging | print() statements | Rotating file logger (logs/app.log) |
+| Gmail errors | Basic try-except | Rate limiter + retry + auto-label |
+| Frontend data | Hardcoded in JS | Fetched from REST APIs |
+| Pipeline | Manual preprocess | sklearn Pipeline (no duplication) |
+| Reproducibility | Random split | Saved random state (42) |
+| Model save | Raw .pkl files | Full Pipeline .pkl files |
+| UI architecture | Single-page app (JS tab-switching) | Multi-page (`/detect`, `/dashboard`, `/gmail`, `/analytics`) |
+| ROC curves | Hardcoded placeholder shape | Computed via `sklearn.metrics.roc_curve()` |
+| Explainability | LIME only | LIME + SHAP, side by side |
+| Prediction | Single model only | Single model + weighted ensemble vote |
+| Risk assessment | None | Explainable Risk Score (URL/Keyword/Urgency/Probability) |

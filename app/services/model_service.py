@@ -106,16 +106,17 @@ def _build_spam_vocab() -> None:
     if "naive_bayes" not in _PIPELINES:
         return
     try:
-        pipe = _PIPELINES["naive_bayes"]
+        pipe  = _PIPELINES["naive_bayes"]
         tfidf = pipe.named_steps["tfidf"]
         clf   = pipe.named_steps["clf"]
         vocab = tfidf.get_feature_names_out()
         # log P(feature | spam) - log P(feature | ham)
-        diff  = clf.feature_log_prob_[1] - clf.feature_log_prob_[0]
-        top_n = 200
+        diff    = clf.feature_log_prob_[1] - clf.feature_log_prob_[0]
+        top_n   = 300  # larger pool before bigram-filter so we still get ~200 unigrams
         top_idx = np.argsort(diff)[-top_n:]
-        _SPAM_VOCAB = {vocab[i] for i in top_idx}
-        logger.info("Built spam vocab with %d learned tokens", len(_SPAM_VOCAB))
+        # Keep only unigrams (no spaces = single token after TF-IDF tokenization)
+        _SPAM_VOCAB = {vocab[i] for i in top_idx if " " not in vocab[i]}
+        logger.info("Built spam vocab with %d learned unigrams", len(_SPAM_VOCAB))
     except Exception as exc:
         logger.warning("Could not build spam vocab: %s", exc)
 
@@ -319,7 +320,7 @@ def _classify_category(text: str, label: str) -> str:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SHARED: text -> probability function builder (used by LIME and SHAP)
+# text -> probability function builder (used by LIME and SHAP)
 # ═════════════════════════════════════════════════════════════════════════════
 def _make_predict_proba_fn(model_key: str):
     """
@@ -471,7 +472,8 @@ def is_dnn_available() -> bool:
 
 
 def get_top_spam_words(n: int = 15) -> list[dict]:
-    """Return top-N learned spam tokens with approximate scores."""
+    """Return top-N learned spam unigrams with approximate scores.
+    Bigrams are excluded"""
     if "naive_bayes" not in _PIPELINES:
         return []
     try:
@@ -480,8 +482,15 @@ def get_top_spam_words(n: int = 15) -> list[dict]:
         clf   = pipe.named_steps["clf"]
         vocab = tfidf.get_feature_names_out()
         diff  = clf.feature_log_prob_[1] - clf.feature_log_prob_[0]
-        idx   = np.argsort(diff)[-n:][::-1]
-        return [{"word": vocab[i], "score": round(float(diff[i]), 3)} for i in idx]
+        # Sort all features descending, then take the top-n unigrams only
+        sorted_idx = np.argsort(diff)[::-1]
+        results = []
+        for i in sorted_idx:
+            if " " not in vocab[i]:   # skip bigrams
+                results.append({"word": vocab[i], "score": round(float(diff[i]), 3)})
+            if len(results) >= n:
+                break
+        return results
     except Exception as exc:
         logger.warning("get_top_spam_words failed: %s", exc)
         return []

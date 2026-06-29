@@ -63,11 +63,13 @@ def tokenize_for_highlight(text: str, spam_vocab: set) -> list[dict]:
 
     Args:
         text:       raw message text
-        spam_vocab: set of high-weight spam tokens from the trained model
+        spam_vocab: set of stemmed, high-weight spam unigrams from the trained model
     """
-    words = re.findall(r"[A-Za-z0-9£$€%!]+", text)
+    from nltk.stem import PorterStemmer
+    stemmer = PorterStemmer()
+    words = re.findall(r"[A-Za-z0-9£$€%]+", text)
     return [
-        {"word": w, "is_spam": w.lower() in spam_vocab}
+        {"word": w, "is_spam": stemmer.stem(w.lower()) in spam_vocab}
         for w in words
     ]
 

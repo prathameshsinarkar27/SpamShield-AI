@@ -72,7 +72,7 @@ df["label_bin"] = (df["label"] == "spam").astype(int)
 X     = df["processed"].values
 y     = df["label_bin"].values
 y_cat = df["category"].values
-X_raw = df["text"].values          # kept for reference
+X_raw = df["text"].values        
 
 # ── Stratified 80/20 split ────────────────────────────────────────────────────
 X_train, X_test, y_train, y_test, ycat_train, ycat_test = train_test_split(
